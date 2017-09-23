@@ -253,24 +253,27 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	// Make a request to get the 401 that contains the challenge.
 	resp, err := t.Transport.RoundTrip(req)
-	if err != nil || resp.StatusCode != 401 {
-		return resp, err
+	if err != nil {
+		return nil, err
 	}
+	if resp.StatusCode != http.StatusUnauthorized {
+		return resp, nil
+	}
+	// We'll no longer use the initial response, so close it
+	resp.Body.Close()
+
 	chal := resp.Header.Get("WWW-Authenticate")
 	c, err := parseChallenge(chal)
 	if err != nil {
-		return resp, err
+		return nil, err
 	}
 
 	// Form credentials based on the challenge.
 	cr := t.newCredentials(req2, c)
 	auth, err := cr.authorize()
 	if err != nil {
-		return resp, err
+		return nil, err
 	}
-
-	// We'll no longer use the initial response, so close it
-	resp.Body.Close()
 
 	// Make authenticated request.
 	req2.Header.Set("Authorization", auth)
