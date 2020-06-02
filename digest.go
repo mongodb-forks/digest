@@ -242,8 +242,11 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		req2.Header[k] = s
 	}
 
-	// Copy body - we need it twice.
-	if req.Body != nil {
+	// We'll need the request body twice. In some cases we can use GetBody
+	// to obtain a fresh reader for the second request, which we do right
+	// before the RoundTrip(req2) call. If GetBody is unavailable, read
+	// the body into a memory buffer and use it for both requests.
+	if req.Body != nil && req.GetBody == nil {
 		body, err := ioutil.ReadAll(req.Body)
 		if err != nil {
 			return nil, err
@@ -273,6 +276,14 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	auth, err := cr.authorize()
 	if err != nil {
 		return nil, err
+	}
+
+	// Obtain a fresh body.
+	if req.Body != nil && req.GetBody != nil {
+		req2.Body, err = req.GetBody()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Make authenticated request.
