@@ -47,8 +47,10 @@ import (
 	"bytes"
 	"crypto/md5"
 	"crypto/rand"
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -139,24 +141,27 @@ type credentials struct {
 	NonceCount int
 	method     string
 	password   string
+	impl       hashingFunc
 }
 
-func h(data string) string {
-	hf := md5.New()
+type hashingFunc func() hash.Hash
+
+func h(data string, f hashingFunc) string {
+	hf := f()
 	io.WriteString(hf, data)
 	return fmt.Sprintf("%x", hf.Sum(nil))
 }
 
-func kd(secret, data string) string {
-	return h(fmt.Sprintf("%s:%s", secret, data))
+func kd(secret, data string, f hashingFunc) string {
+	return h(fmt.Sprintf("%s:%s", secret, data), f)
 }
 
 func (c *credentials) ha1() string {
-	return h(fmt.Sprintf("%s:%s:%s", c.Username, c.Realm, c.password))
+	return h(fmt.Sprintf("%s:%s:%s", c.Username, c.Realm, c.password), c.impl)
 }
 
 func (c *credentials) ha2() string {
-	return h(fmt.Sprintf("%s:%s", c.method, c.DigestURI))
+	return h(fmt.Sprintf("%s:%s", c.method, c.DigestURI), c.impl)
 }
 
 func (c *credentials) resp(cnonce string) (string, error) {
@@ -170,9 +175,9 @@ func (c *credentials) resp(cnonce string) (string, error) {
 			c.Cnonce = fmt.Sprintf("%x", b)[:16]
 		}
 		return kd(c.ha1(), fmt.Sprintf("%s:%08x:%s:%s:%s",
-			c.Nonce, c.NonceCount, c.Cnonce, c.MessageQop, c.ha2())), nil
+			c.Nonce, c.NonceCount, c.Cnonce, c.MessageQop, c.ha2()), c.impl), nil
 	} else if c.MessageQop == "" {
-		return kd(c.ha1(), fmt.Sprintf("%s:%s", c.Nonce, c.ha2())), nil
+		return kd(c.ha1(), fmt.Sprintf("%s:%s", c.Nonce, c.ha2()), c.impl), nil
 	}
 	return "", ErrAlgNotImplemented
 }
@@ -180,7 +185,7 @@ func (c *credentials) resp(cnonce string) (string, error) {
 func (c *credentials) authorize() (string, error) {
 	// Note that this is only implemented for MD5 and NOT MD5-sess.
 	// MD5-sess is rarely supported and those that do are a big mess.
-	if c.Algorithm != "MD5" {
+	if c.Algorithm != "MD5" && c.Algorithm != "SHA-256" {
 		return "", ErrAlgNotImplemented
 	}
 	// Note that this is NOT implemented for "qop=auth-int".  Similarly the
@@ -211,8 +216,8 @@ func (c *credentials) authorize() (string, error) {
 	return fmt.Sprintf("Digest %s", strings.Join(sl, ", ")), nil
 }
 
-func (t *Transport) newCredentials(req *http.Request, c *challenge) *credentials {
-	return &credentials{
+func (t *Transport) newCredentials(req *http.Request, c *challenge) (*credentials, error) {
+	cred := &credentials{
 		Username:   t.Username,
 		Realm:      c.Realm,
 		Nonce:      c.Nonce,
@@ -224,6 +229,16 @@ func (t *Transport) newCredentials(req *http.Request, c *challenge) *credentials
 		method:     req.Method,
 		password:   t.Password,
 	}
+	switch c.Algorithm {
+	case "MD5":
+		cred.impl = md5.New
+	case "SHA-256":
+		cred.impl = sha256.New
+	default:
+		return nil, ErrAlgNotImplemented
+	}
+
+	return cred, nil
 }
 
 // RoundTrip makes a request expecting a 401 response that will require digest
@@ -272,7 +287,10 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	// Form credentials based on the challenge.
-	cr := t.newCredentials(req2, c)
+	cr, err := t.newCredentials(req2, c)
+	if err != nil {
+		return nil, err
+	}
 	auth, err := cr.authorize()
 	if err != nil {
 		return nil, err
