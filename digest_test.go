@@ -31,185 +31,178 @@ import (
 var cnonce = "0a4f113b"
 
 func TestH(t *testing.T) {
-	t.Run("MD5", func(t *testing.T) {
-		r1 := h("Mufasa:testrealm@host.com:Circle Of Life", md5.New)
-		expected := "939e7578ed9e3c518a452acee763bce9"
-		if r1 != expected {
-			t.Errorf("expected=%s, but got=%s\n", expected, r1)
-		}
-
-		r2 := h("GET:/dir/index.html", md5.New)
-		expected = "39aff3a2bab6126f332b942af96d3366"
-		if r2 != expected {
-			t.Errorf("expected=%s, but got=%s\n", expected, r2)
-		}
-
-		r3 := h(fmt.Sprintf("%s:dcd98b7102dd2f0e8b11d0f600bfb0c093:00000001:0a4f113b:auth:%s", r1, r2), md5.New)
-		expected = "6629fae49393a05397450978507c4ef1"
-		if r3 != expected {
-			t.Errorf("expected=%s, but got=%s\n", expected, r3)
-		}
-	})
-	t.Run("SHA-256", func(t *testing.T) {
-		r1 := h("Mufasa:testrealm@host.com:Circle Of Life", sha256.New)
-		expected := "3ba6cd94661c5ef34598040c868f13b8775df29109986be50ad35ae537dd3aa4"
-		if r1 != expected {
-			t.Errorf("expected=%s, but got=%s\n", expected, r1)
-		}
-
-		r2 := h("GET:/dir/index.html", sha256.New)
-		expected = "9a3fdae9a622fe8de177c24fa9c070f2b181ec85e15dcbdc32e10c82ad450b04"
-		if r2 != expected {
-			t.Errorf("expected=%s, but got=%s\n", expected, r2)
-		}
-
-		r3 := h(fmt.Sprintf("%s:dcd98b7102dd2f0e8b11d0f600bfb0c093:00000001:0a4f113b:auth:%s", r1, r2), sha256.New)
-		expected = "5abdd07184ba512a22c53f41470e5eea7dcaa3a93a59b630c13dfe0a5dc6e38b"
-		if r3 != expected {
-			t.Errorf("expected=%s, but got=%s\n", expected, r3)
-		}
-	})
+	testCases := map[string]map[string]string{
+		"MD5": {
+			"r1": "Mufasa:testrealm@host.com:Circle Of Life",
+			"r2": "GET:/dir/index.html",
+			"expected_r1": "939e7578ed9e3c518a452acee763bce9",
+			"expected_r2": "39aff3a2bab6126f332b942af96d3366",
+			"expected_r3": "6629fae49393a05397450978507c4ef1",
+		},
+		"SHA-256": {
+			"r1": "Mufasa:testrealm@host.com:Circle Of Life",
+			"r2": "GET:/dir/index.html",
+			"expected_r1": "3ba6cd94661c5ef34598040c868f13b8775df29109986be50ad35ae537dd3aa4",
+			"expected_r2": "9a3fdae9a622fe8de177c24fa9c070f2b181ec85e15dcbdc32e10c82ad450b04",
+			"expected_r3": "5abdd07184ba512a22c53f41470e5eea7dcaa3a93a59b630c13dfe0a5dc6e38b",
+		},
+	}
+	for testType, values := range testCases {
+		t.Run(testType, func(t *testing.T) {
+			var hashingFunc hashingFunc
+			if testType == "MD5" {
+				hashingFunc = md5.New
+			} else if testType == "SHA-256" {
+				hashingFunc = sha256.New
+			}
+			r1 := h(values["r1"], hashingFunc)
+			if r1 != values["expected_r1"] {
+				t.Errorf("expected=%s, but got=%s\n", values["expected_r1"], r1)
+			}
+			r2 := h(values["r2"], hashingFunc)
+			if r2 != values["expected_r2"] {
+				t.Errorf("expected=%s, but got=%s\n", values["expected_r2"], r2)
+			}
+			r3 := h(fmt.Sprintf("%s:dcd98b7102dd2f0e8b11d0f600bfb0c093:00000001:0a4f113b:auth:%s", r1, r2), hashingFunc)
+			if r3 != values["expected_r3"] {
+				t.Errorf("expected=%s, but got=%s\n", values["expected_r3"], r3)
+			}
+		})
+	}
 }
 
 func TestKd(t *testing.T) {
-	t.Run("MD5", func(t *testing.T) {
-		r1 := kd("939e7578ed9e3c518a452acee763bce9",
-			"dcd98b7102dd2f0e8b11d0f600bfb0c093:00000001:0a4f113b:auth:39aff3a2bab6126f332b942af96d3366",
-			md5.New)
-		if r1 != "6629fae49393a05397450978507c4ef1" {
-			t.Fail()
-		}
-	})
-
-	t.Run("SHA-256", func(t *testing.T) {
-		r1 := kd("939e7578ed9e3c518a452acee763bce9",
-			"dcd98b7102dd2f0e8b11d0f600bfb0c093:00000001:0a4f113b:auth:39aff3a2bab6126f332b942af96d3366",
-			sha256.New)
-		if r1 != "ca165e8478c14bd2a5c64cc86ffe17c277ee2cff3e98c330ee5565e8e206ca3e" {
-			t.Fail()
-		}
-	})
+	testCases := map[string]map[string]string{
+		"MD5": {
+			"secret": "939e7578ed9e3c518a452acee763bce9",
+			"data": "dcd98b7102dd2f0e8b11d0f600bfb0c093:00000001:0a4f113b:auth:39aff3a2bab6126f332b942af96d3366",
+			"expected": "6629fae49393a05397450978507c4ef1",
+		},
+		"SHA-256": {
+			"secret": "939e7578ed9e3c518a452acee763bce9",
+			"data": "dcd98b7102dd2f0e8b11d0f600bfb0c093:00000001:0a4f113b:auth:39aff3a2bab6126f332b942af96d3366",
+			"expected": "ca165e8478c14bd2a5c64cc86ffe17c277ee2cff3e98c330ee5565e8e206ca3e",
+		},
+	}
+	for testType, values := range testCases {
+		t.Run(testType, func(t *testing.T) {
+			var hashingFunc hashingFunc
+			if testType == "MD5" {
+				hashingFunc = md5.New
+			} else if testType == "SHA-256" {
+				hashingFunc = sha256.New
+			}
+			if r1 := kd(values["secret"],values["data"], hashingFunc); r1 != values["expected"] {
+				t.Errorf("expected=%s, but got=%s\n", values["expected"], r1)
+			}
+		})
+	}
 }
 
 func TestHa1(t *testing.T) {
-	t.Run("MD5", func(t *testing.T) {
-		cred := &credentials{
-			Username:   "Mufasa",
-			Realm:      "testrealm@host.com",
-			Nonce:      "dcd98b7102dd2f0e8b11d0f600bfb0c093",
-			DigestURI:  "/dir/index.html",
-			Algorithm:  "MD5",
-			Opaque:     "5ccc069c403ebaf9f0171e9517f40e41",
-			MessageQop: "auth",
-			method:     "GET",
-			password:   "Circle Of Life",
-			impl:       md5.New,
-		}
-		r1 := cred.ha1()
-		if r1 != "939e7578ed9e3c518a452acee763bce9" {
-			t.Fail()
-		}
-	})
-	t.Run("SHA-256", func(t *testing.T) {
-		cred := &credentials{
-			Username:   "Mufasa",
-			Realm:      "testrealm@host.com",
-			Nonce:      "dcd98b7102dd2f0e8b11d0f600bfb0c093",
-			DigestURI:  "/dir/index.html",
-			Algorithm:  "SHA-256",
-			Opaque:     "5ccc069c403ebaf9f0171e9517f40e41",
-			MessageQop: "auth",
-			method:     "GET",
-			password:   "Circle Of Life",
-			impl:       sha256.New,
-		}
-		r1 := cred.ha1()
-		if r1 != "3ba6cd94661c5ef34598040c868f13b8775df29109986be50ad35ae537dd3aa4" {
-			t.Fail()
-		}
-	})
+	testCases := map[string]map[string]string{
+		"MD5": {
+			"expected": "939e7578ed9e3c518a452acee763bce9",
+		},
+		"SHA-256": {
+			"expected": "3ba6cd94661c5ef34598040c868f13b8775df29109986be50ad35ae537dd3aa4",
+		},
+	}
+	for testType, values := range testCases {
+		t.Run(testType, func(t *testing.T) {
+			var hashingFunc hashingFunc
+			if testType == "MD5" {
+				hashingFunc = md5.New
+			} else if testType == "SHA-256" {
+				hashingFunc = sha256.New
+			}
+			cred := &credentials{
+				Username:   "Mufasa",
+				Realm:      "testrealm@host.com",
+				Nonce:      "dcd98b7102dd2f0e8b11d0f600bfb0c093",
+				DigestURI:  "/dir/index.html",
+				Algorithm:  testType,
+				Opaque:     "5ccc069c403ebaf9f0171e9517f40e41",
+				MessageQop: "auth",
+				method:     "GET",
+				password:   "Circle Of Life",
+				impl:       hashingFunc,
+			}
+			if r1 :=  cred.ha1(); r1 != values["expected"] {
+				t.Errorf("expected=%s, but got=%s\n", values["expected"], r1)
+			}
+		})
+	}
 }
 
 func TestHa2(t *testing.T) {
-	t.Run("MD5", func(t *testing.T) {
-		cred := &credentials{
-			Username:   "Mufasa",
-			Realm:      "testrealm@host.com",
-			Nonce:      "dcd98b7102dd2f0e8b11d0f600bfb0c093",
-			DigestURI:  "/dir/index.html",
-			Algorithm:  "MD5",
-			Opaque:     "5ccc069c403ebaf9f0171e9517f40e41",
-			MessageQop: "auth",
-			method:     "GET",
-			password:   "Circle Of Life",
-			impl:       md5.New,
-		}
-		r1 := cred.ha2()
-		if r1 != "39aff3a2bab6126f332b942af96d3366" {
-			t.Fail()
-		}
-	})
-	t.Run("SHA-256", func(t *testing.T) {
-		cred := &credentials{
-			Username:   "Mufasa",
-			Realm:      "testrealm@host.com",
-			Nonce:      "dcd98b7102dd2f0e8b11d0f600bfb0c093",
-			DigestURI:  "/dir/index.html",
-			Algorithm:  "MD5",
-			Opaque:     "5ccc069c403ebaf9f0171e9517f40e41",
-			MessageQop: "auth",
-			method:     "GET",
-			password:   "Circle Of Life",
-			impl:       sha256.New,
-		}
-		r1 := cred.ha2()
-		if r1 != "9a3fdae9a622fe8de177c24fa9c070f2b181ec85e15dcbdc32e10c82ad450b04" {
-			t.Fail()
-		}
-	})
+	testCases := map[string]map[string]string{
+		"MD5": {
+			"expected": "39aff3a2bab6126f332b942af96d3366",
+		},
+		"SHA-256": {
+			"expected": "9a3fdae9a622fe8de177c24fa9c070f2b181ec85e15dcbdc32e10c82ad450b04",
+		},
+	}
+	for testType, values := range testCases {
+		t.Run(testType, func(t *testing.T) {
+			var hashingFunc hashingFunc
+			if testType == "MD5" {
+				hashingFunc = md5.New
+			} else if testType == "SHA-256" {
+				hashingFunc = sha256.New
+			}
+			cred := &credentials{
+				Username:   "Mufasa",
+				Realm:      "testrealm@host.com",
+				Nonce:      "dcd98b7102dd2f0e8b11d0f600bfb0c093",
+				DigestURI:  "/dir/index.html",
+				Algorithm:  testType,
+				Opaque:     "5ccc069c403ebaf9f0171e9517f40e41",
+				MessageQop: "auth",
+				method:     "GET",
+				password:   "Circle Of Life",
+				impl:       hashingFunc,
+			}
+			if r1 :=  cred.ha2(); r1 != values["expected"] {
+				t.Errorf("expected=%s, but got=%s\n", values["expected"], r1)
+			}
+		})
+	}
 }
 
 func TestResp(t *testing.T) {
-	t.Run("MD5", func(t *testing.T) {
-		cred := &credentials{
-			Username:   "Mufasa",
-			Realm:      "testrealm@host.com",
-			Nonce:      "dcd98b7102dd2f0e8b11d0f600bfb0c093",
-			DigestURI:  "/dir/index.html",
-			Algorithm:  "MD5",
-			Opaque:     "5ccc069c403ebaf9f0171e9517f40e41",
-			MessageQop: "auth",
-			method:     "GET",
-			password:   "Circle Of Life",
-			impl:       md5.New,
-		}
-		r1, err := cred.resp(cnonce)
-		if err != nil {
-			t.Fail()
-		}
-		if r1 != "6629fae49393a05397450978507c4ef1" {
-			t.Fail()
-		}
-	})
-	t.Run("MD5", func(t *testing.T) {
-		cred := &credentials{
-			Username:   "Mufasa",
-			Realm:      "testrealm@host.com",
-			Nonce:      "dcd98b7102dd2f0e8b11d0f600bfb0c093",
-			DigestURI:  "/dir/index.html",
-			Algorithm:  "SHA-256",
-			Opaque:     "5ccc069c403ebaf9f0171e9517f40e41",
-			MessageQop: "auth",
-			method:     "GET",
-			password:   "Circle Of Life",
-			impl:       sha256.New,
-		}
-		r1, err := cred.resp(cnonce)
-		if err != nil {
-			t.Fail()
-		}
-		if r1 != "5abdd07184ba512a22c53f41470e5eea7dcaa3a93a59b630c13dfe0a5dc6e38b" {
-			t.Fail()
-		}
-	})
+	testCases := map[string]map[string]string{
+		"MD5": {
+			"expected": "6629fae49393a05397450978507c4ef1",
+		},
+		"SHA-256": {
+			"expected": "5abdd07184ba512a22c53f41470e5eea7dcaa3a93a59b630c13dfe0a5dc6e38b",
+		},
+	}
+	for testType, values := range testCases {
+		t.Run(testType, func(t *testing.T) {
+			var hashingFunc hashingFunc
+			if testType == "MD5" {
+				hashingFunc = md5.New
+			} else if testType == "SHA-256" {
+				hashingFunc = sha256.New
+			}
+			cred := &credentials{
+				Username:   "Mufasa",
+				Realm:      "testrealm@host.com",
+				Nonce:      "dcd98b7102dd2f0e8b11d0f600bfb0c093",
+				DigestURI:  "/dir/index.html",
+				Algorithm:  testType,
+				Opaque:     "5ccc069c403ebaf9f0171e9517f40e41",
+				MessageQop: "auth",
+				method:     "GET",
+				password:   "Circle Of Life",
+				impl:       hashingFunc,
+			}
+			if r1, err := cred.resp(cnonce); err != nil || r1 != values["expected"] {
+				t.Errorf("expected=%s, but got=%s\n", values["expected"], r1)
+			}
+		})
+	}
 }

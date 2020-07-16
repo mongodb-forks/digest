@@ -141,18 +141,18 @@ type credentials struct {
 	NonceCount int
 	method     string
 	password   string
-	impl       hashing
+	impl       hashingFunc
 }
 
-type hashing func() hash.Hash
+type hashingFunc func() hash.Hash
 
-func h(data string, f hashing) string {
+func h(data string, f hashingFunc) string {
 	hf := f()
 	io.WriteString(hf, data)
 	return fmt.Sprintf("%x", hf.Sum(nil))
 }
 
-func kd(secret, data string, f hashing) string {
+func kd(secret, data string, f hashingFunc) string {
 	return h(fmt.Sprintf("%s:%s", secret, data), f)
 }
 
@@ -166,9 +166,6 @@ func (c *credentials) ha2() string {
 
 func (c *credentials) resp(cnonce string) (string, error) {
 	c.NonceCount++
-	if c.impl == nil {
-		return "", errors.New("no hashing impl")
-	}
 	if c.MessageQop == "auth" {
 		if cnonce != "" {
 			c.Cnonce = cnonce
@@ -219,7 +216,7 @@ func (c *credentials) authorize() (string, error) {
 	return fmt.Sprintf("Digest %s", strings.Join(sl, ", ")), nil
 }
 
-func (t *Transport) newCredentials(req *http.Request, c *challenge) *credentials {
+func (t *Transport) newCredentials(req *http.Request, c *challenge) (*credentials, error) {
 	cred := &credentials{
 		Username:   t.Username,
 		Realm:      c.Realm,
@@ -232,12 +229,16 @@ func (t *Transport) newCredentials(req *http.Request, c *challenge) *credentials
 		method:     req.Method,
 		password:   t.Password,
 	}
-	if c.Algorithm == "MD5" {
+	switch c.Algorithm {
+	case "MD5":
 		cred.impl = md5.New
-	} else if c.Algorithm == "SHA-256" {
+	case "SHA-256":
 		cred.impl = sha256.New
+	default:
+		return nil, ErrAlgNotImplemented
 	}
-	return cred
+
+	return cred, nil
 }
 
 // RoundTrip makes a request expecting a 401 response that will require digest
@@ -286,7 +287,10 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	// Form credentials based on the challenge.
-	cr := t.newCredentials(req2, c)
+	cr, err := t.newCredentials(req2, c)
+	if err != nil {
+		return nil, err
+	}
 	auth, err := cr.authorize()
 	if err != nil {
 		return nil, err
