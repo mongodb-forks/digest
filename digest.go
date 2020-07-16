@@ -13,10 +13,13 @@
 // limitations under the License.
 
 // The digest package provides an implementation of http.RoundTripper that takes
-// care of HTTP Digest Authentication (http://www.ietf.org/rfc/rfc2617.txt).
-// This only implements the MD5 and "auth" portions of the RFC, but that covers
-// the majority of avalible server side implementations including apache web
-// server.
+// care of HTTP Digest Authentication (https://tools.ietf.org/html/rfc7616).
+
+// This only implements the MD5, SHA-256 and "auth" portions of the RFC, which
+// is enough to authenticate the client to the majority of available
+// server side implementations using Digest Access Authentication (e.g.,
+// the Apache Web Server).
+//
 //
 // Example usage:
 //
@@ -41,6 +44,31 @@
 //		return err
 //	}
 //
+// OR if you want fine-grained control over timeouts
+//
+// t := &digest.Transport{Username: "myUserName", Password: "myP@55w0rd"}
+// t.Transport = &http.Transport{
+// 	DialContext: (&net.Dialer{
+// 		Timeout:   30 * time.Second,
+// 		KeepAlive: 10 * time.Second,
+// 	}).DialContext,
+// 	ExpectContinueTimeout: 10 * time.Second,
+// 	IdleConnTimeout:       60 * time.Second,
+// 	MaxIdleConns:          100,
+// 	MaxIdleConnsPerHost:   4,
+// 	Proxy:                 http.ProxyFromEnvironment,
+// 	ResponseHeaderTimeout: 30 * time.Second,
+// 	TLSHandshakeTimeout:   10 * time.Second,
+// }
+// c, err := t.Client()
+// if err != nil {
+// 	return nil, err
+// }
+// resp, err := c.Get("http://notreal.com/path?arg=1")
+// if err != nil {
+// 	return nil, err
+// }
+
 package digest
 
 import (
@@ -57,10 +85,14 @@ import (
 	"strings"
 )
 
+const MsgAuth string = "auth"
+const AlgMD5 string = "MD5"
+const AlgSha256 string = "SHA-256"
+
 var (
-	ErrNilTransport      = errors.New("Transport is nil")
-	ErrBadChallenge      = errors.New("Challenge is bad")
-	ErrAlgNotImplemented = errors.New("Alg not implemented")
+	ErrNilTransport      = errors.New("transport is nil")
+	ErrBadChallenge      = errors.New("challenge is bad")
+	ErrAlgNotImplemented = errors.New("alg not implemented")
 )
 
 // Transport is an implementation of http.RoundTripper that takes care of http
@@ -101,7 +133,7 @@ func parseChallenge(input string) (*challenge, error) {
 	s = strings.Trim(s[7:], ws)
 	sl := strings.Split(s, ", ")
 	c := &challenge{
-		Algorithm: "MD5",
+		Algorithm: AlgMD5,
 	}
 	var r []string
 	for i := range sl {
@@ -120,7 +152,7 @@ func parseChallenge(input string) (*challenge, error) {
 		case "algorithm":
 			c.Algorithm = strings.Trim(r[1], qs)
 		case "qop":
-			//TODO(gavaletz) should be an array of strings?
+			// TODO(gavaletz) should be an array of strings?
 			c.Qop = strings.Trim(r[1], qs)
 		default:
 			return nil, ErrBadChallenge
@@ -146,38 +178,56 @@ type credentials struct {
 
 type hashingFunc func() hash.Hash
 
-func h(data string, f hashingFunc) string {
+func h(data string, f hashingFunc) (string, error) {
 	hf := f()
-	io.WriteString(hf, data)
-	return fmt.Sprintf("%x", hf.Sum(nil))
+	if _, err := io.WriteString(hf, data); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", hf.Sum(nil)), nil
 }
 
-func kd(secret, data string, f hashingFunc) string {
+func kd(secret, data string, f hashingFunc) (string, error) {
 	return h(fmt.Sprintf("%s:%s", secret, data), f)
 }
 
-func (c *credentials) ha1() string {
+func (c *credentials) ha1() (string, error) {
 	return h(fmt.Sprintf("%s:%s:%s", c.Username, c.Realm, c.password), c.impl)
 }
 
-func (c *credentials) ha2() string {
+func (c *credentials) ha2() (string, error) {
 	return h(fmt.Sprintf("%s:%s", c.method, c.DigestURI), c.impl)
 }
 
-func (c *credentials) resp(cnonce string) (string, error) {
+func (c *credentials) resp(cnonce string) (resp string, err error) {
+	var ha1 string
+	var ha2 string
 	c.NonceCount++
-	if c.MessageQop == "auth" {
+	if c.MessageQop == MsgAuth {
 		if cnonce != "" {
 			c.Cnonce = cnonce
 		} else {
 			b := make([]byte, 8)
-			io.ReadFull(rand.Reader, b)
+			_, err = io.ReadFull(rand.Reader, b)
+			if err != nil {
+				return "", err
+			}
 			c.Cnonce = fmt.Sprintf("%x", b)[:16]
 		}
-		return kd(c.ha1(), fmt.Sprintf("%s:%08x:%s:%s:%s",
-			c.Nonce, c.NonceCount, c.Cnonce, c.MessageQop, c.ha2()), c.impl), nil
+		if ha1, err = c.ha1(); err != nil {
+			return "", err
+		}
+		if ha2, err = c.ha2(); err != nil {
+			return "", err
+		}
+		return kd(ha1, fmt.Sprintf("%s:%08x:%s:%s:%s", c.Nonce, c.NonceCount, c.Cnonce, c.MessageQop, ha2), c.impl)
 	} else if c.MessageQop == "" {
-		return kd(c.ha1(), fmt.Sprintf("%s:%s", c.Nonce, c.ha2()), c.impl), nil
+		if ha1, err = c.ha1(); err != nil {
+			return "", err
+		}
+		if ha2, err = c.ha2(); err != nil {
+			return "", err
+		}
+		return kd(ha1, fmt.Sprintf("%s:%s", c.Nonce, ha2), c.impl)
 	}
 	return "", ErrAlgNotImplemented
 }
@@ -185,12 +235,12 @@ func (c *credentials) resp(cnonce string) (string, error) {
 func (c *credentials) authorize() (string, error) {
 	// Note that this is only implemented for MD5 and NOT MD5-sess.
 	// MD5-sess is rarely supported and those that do are a big mess.
-	if c.Algorithm != "MD5" && c.Algorithm != "SHA-256" {
+	if c.Algorithm != AlgMD5 && c.Algorithm != AlgSha256 {
 		return "", ErrAlgNotImplemented
 	}
 	// Note that this is NOT implemented for "qop=auth-int".  Similarly the
 	// auth-int server side implementations that do exist are a mess.
-	if c.MessageQop != "auth" && c.MessageQop != "" {
+	if c.MessageQop != MsgAuth && c.MessageQop != "" {
 		return "", ErrAlgNotImplemented
 	}
 	resp, err := c.resp("")
@@ -198,10 +248,10 @@ func (c *credentials) authorize() (string, error) {
 		return "", ErrAlgNotImplemented
 	}
 	sl := []string{fmt.Sprintf(`username="%s"`, c.Username)}
-	sl = append(sl, fmt.Sprintf(`realm="%s"`, c.Realm))
-	sl = append(sl, fmt.Sprintf(`nonce="%s"`, c.Nonce))
-	sl = append(sl, fmt.Sprintf(`uri="%s"`, c.DigestURI))
-	sl = append(sl, fmt.Sprintf(`response="%s"`, resp))
+	sl = append(sl, fmt.Sprintf(`realm="%s"`, c.Realm),
+		fmt.Sprintf(`nonce="%s"`, c.Nonce),
+		fmt.Sprintf(`uri="%s"`, c.DigestURI),
+		fmt.Sprintf(`response="%s"`, resp))
 	if c.Algorithm != "" {
 		sl = append(sl, fmt.Sprintf(`algorithm="%s"`, c.Algorithm))
 	}
@@ -209,9 +259,9 @@ func (c *credentials) authorize() (string, error) {
 		sl = append(sl, fmt.Sprintf(`opaque="%s"`, c.Opaque))
 	}
 	if c.MessageQop != "" {
-		sl = append(sl, fmt.Sprintf("qop=%s", c.MessageQop))
-		sl = append(sl, fmt.Sprintf("nc=%08x", c.NonceCount))
-		sl = append(sl, fmt.Sprintf(`cnonce="%s"`, c.Cnonce))
+		sl = append(sl, fmt.Sprintf("qop=%s", c.MessageQop),
+			fmt.Sprintf("nc=%08x", c.NonceCount),
+			fmt.Sprintf(`cnonce="%s"`, c.Cnonce))
 	}
 	return fmt.Sprintf("Digest %s", strings.Join(sl, ", ")), nil
 }
@@ -230,9 +280,9 @@ func (t *Transport) newCredentials(req *http.Request, c *challenge) (*credential
 		password:   t.Password,
 	}
 	switch c.Algorithm {
-	case "MD5":
+	case AlgMD5:
 		cred.impl = md5.New
-	case "SHA-256":
+	case AlgSha256:
 		cred.impl = sha256.New
 	default:
 		return nil, ErrAlgNotImplemented

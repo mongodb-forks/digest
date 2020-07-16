@@ -47,18 +47,29 @@ func TestH(t *testing.T) {
 			"expected_r3": "5abdd07184ba512a22c53f41470e5eea7dcaa3a93a59b630c13dfe0a5dc6e38b",
 		},
 	}
+
 	for testType, values := range testCases {
 		t.Run(testType, func(t *testing.T) {
-			hashingFunc := testHashingFunc(testType)
-			r1 := h(values["r1"], hashingFunc)
+			var err error
+			hFunc := testHashingFunc(testType)
+			r1, err := h(values["r1"], hFunc)
+			if err != nil {
+				t.Fatal(err)
+			}
 			if r1 != values["expected_r1"] {
 				t.Errorf("expected=%s, but got=%s\n", values["expected_r1"], r1)
 			}
-			r2 := h(values["r2"], hashingFunc)
+			r2, err := h(values["r2"], hFunc)
+			if err != nil {
+				t.Fatal(err)
+			}
 			if r2 != values["expected_r2"] {
 				t.Errorf("expected=%s, but got=%s\n", values["expected_r2"], r2)
 			}
-			r3 := h(fmt.Sprintf("%s:dcd98b7102dd2f0e8b11d0f600bfb0c093:00000001:0a4f113b:auth:%s", r1, r2), hashingFunc)
+			r3, err := h(fmt.Sprintf("%s:dcd98b7102dd2f0e8b11d0f600bfb0c093:00000001:0a4f113b:auth:%s", r1, r2), hFunc)
+			if err != nil {
+				t.Fatal(err)
+			}
 			if r3 != values["expected_r3"] {
 				t.Errorf("expected=%s, but got=%s\n", values["expected_r3"], r3)
 			}
@@ -79,10 +90,14 @@ func TestKd(t *testing.T) {
 			"expected": "ca165e8478c14bd2a5c64cc86ffe17c277ee2cff3e98c330ee5565e8e206ca3e",
 		},
 	}
+
 	for testType, values := range testCases {
 		t.Run(testType, func(t *testing.T) {
-			hashingFunc := testHashingFunc(testType)
-			if r1 := kd(values["secret"], values["data"], hashingFunc); r1 != values["expected"] {
+			hFunc := testHashingFunc(testType)
+			if r1, err := kd(values["secret"], values["data"], hFunc); r1 != values["expected"] {
+				if err != nil {
+					t.Fatal(err)
+				}
 				t.Errorf("expected=%s, but got=%s\n", values["expected"], r1)
 			}
 		})
@@ -98,9 +113,10 @@ func TestHa1(t *testing.T) {
 			"expected": "3ba6cd94661c5ef34598040c868f13b8775df29109986be50ad35ae537dd3aa4",
 		},
 	}
+
 	for testType, values := range testCases {
 		t.Run(testType, func(t *testing.T) {
-			hashingFunc := testHashingFunc(testType)
+			hFunc := testHashingFunc(testType)
 			cred := &credentials{
 				Username:   "Mufasa",
 				Realm:      "testrealm@host.com",
@@ -111,9 +127,12 @@ func TestHa1(t *testing.T) {
 				MessageQop: "auth",
 				method:     "GET",
 				password:   "Circle Of Life",
-				impl:       hashingFunc,
+				impl:       hFunc,
 			}
-			if r1 := cred.ha1(); r1 != values["expected"] {
+			if r1, err := cred.ha1(); r1 != values["expected"] {
+				if err != nil {
+					t.Fatal(err)
+				}
 				t.Errorf("expected=%s, but got=%s\n", values["expected"], r1)
 			}
 		})
@@ -129,9 +148,10 @@ func TestHa2(t *testing.T) {
 			"expected": "9a3fdae9a622fe8de177c24fa9c070f2b181ec85e15dcbdc32e10c82ad450b04",
 		},
 	}
+
 	for testType, values := range testCases {
 		t.Run(testType, func(t *testing.T) {
-			hashingFunc := testHashingFunc(testType)
+			hFunc := testHashingFunc(testType)
 			cred := &credentials{
 				Username:   "Mufasa",
 				Realm:      "testrealm@host.com",
@@ -142,9 +162,12 @@ func TestHa2(t *testing.T) {
 				MessageQop: "auth",
 				method:     "GET",
 				password:   "Circle Of Life",
-				impl:       hashingFunc,
+				impl:       hFunc,
 			}
-			if r1 := cred.ha2(); r1 != values["expected"] {
+			if r1, err := cred.ha2(); r1 != values["expected"] {
+				if err != nil {
+					t.Fatal(err)
+				}
 				t.Errorf("expected=%s, but got=%s\n", values["expected"], r1)
 			}
 		})
@@ -160,9 +183,10 @@ func TestResp(t *testing.T) {
 			"expected": "5abdd07184ba512a22c53f41470e5eea7dcaa3a93a59b630c13dfe0a5dc6e38b",
 		},
 	}
+
 	for testType, values := range testCases {
 		t.Run(testType, func(t *testing.T) {
-			hashingFunc := testHashingFunc(testType)
+			hFunc := testHashingFunc(testType)
 			cred := &credentials{
 				Username:   "Mufasa",
 				Realm:      "testrealm@host.com",
@@ -173,7 +197,7 @@ func TestResp(t *testing.T) {
 				MessageQop: "auth",
 				method:     "GET",
 				password:   "Circle Of Life",
-				impl:       hashingFunc,
+				impl:       hFunc,
 			}
 			if r1, err := cred.resp(cnonce); err != nil || r1 != values["expected"] {
 				t.Errorf("expected=%s, but got=%s\n", values["expected"], r1)
