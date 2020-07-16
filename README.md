@@ -1,4 +1,4 @@
-[![GoDoc](https://godoc.org/github.com/bobziuchkovski/digest?status.svg)](https://godoc.org/github.com/bobziuchkovski/digest)
+[![GoDoc](https://godoc.org/github.com/mongodb-forks/digest?status.svg)](https://godoc.org/github.com/mongodb-forks/digest)
 
 # Golang HTTP Digest Authentication
 
@@ -7,6 +7,12 @@
 This is a fork of the (unmaintained) code.google.com/p/mlab-ns2/gae/ns/digest package.
 There's a descriptor leak in the original package, so this fork was created to patch
 the leak.
+
+### Update 2020
+
+This is a fork of the now unmaintained fork of [digest](https://github.com/bobziuchkovski/digest).
+This implementation now supports the SHA-256 algorithm which was added as part of [rfc 7616](https://tools.ietf.org/html/rfc7616).
+
 
 ## Usage
 
