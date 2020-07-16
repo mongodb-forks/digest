@@ -1,29 +1,26 @@
-GOLANGCI_VERSION=v1.28.3
-
-.PHONY: setup
-setup: ## Setup any developer dependencies
-	@echo "==>"
-	@echo "==> Installing dependencies..."
-	@curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s $(GOLANGCI_VERSION)
-
 .PHONY: fmt
 fmt: ## Format the code
 	@echo "==>"
-	@echo "==> Formatting code..."
+	@echo "==> Formatting the code..."
 	@gofmt -w -s .
 	@goimports -w .
+
+	@echo "==>"
+	@echo "==> Running go mod tidy..."
+	@go mod tidy
+
 
 .PHONY: lint
 lint: ## Lint the code
 	@echo "==>"
 	@echo "==> Linting all packages..."
-	@bin/golangci-lint run
+	@go run github.com/golangci/golangci-lint/cmd/golangci-lint run
 
 .PHONY: fix-lint
 fix-lint: ## Fix linting errors
 	@echo "==>"
 	@echo "==> Fixing lint errors"
-	@golangci-lint run --fix
+	@go run github.com/golangci/golangci-lint/cmd/golangci-lint --fix
 
 .PHONY: build
 build: ## Build the library

@@ -85,9 +85,11 @@ import (
 	"strings"
 )
 
-const MsgAuth string = "auth"
-const AlgMD5 string = "MD5"
-const AlgSha256 string = "SHA-256"
+const (
+	MsgAuth   string = "auth"
+	AlgMD5    string = "MD5"
+	AlgSha256 string = "SHA-256"
+)
 
 var (
 	ErrNilTransport      = errors.New("transport is nil")
