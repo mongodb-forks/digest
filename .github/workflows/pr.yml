@@ -1,0 +1,17 @@
+on:
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  tests:
+    name: Pull Request
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Installing dependencies
+        run: make setup
+
+      - name: Formatting, linting, and running tests
+        run: make all
