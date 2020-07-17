@@ -1,5 +1,7 @@
 [![GoDoc](https://godoc.org/github.com/mongodb-forks/digest?status.svg)](https://godoc.org/github.com/mongodb-forks/digest)
 
+![.github/workflows/pr.yml](https://github.com/mongodb-forks/digest/workflows/.github/workflows/pr.yml/badge.svg?branch=master&event=push)
+
 # Golang HTTP Digest Authentication
 
 ## Overview
