@@ -1,4 +1,4 @@
-GOLANGCI_VERSION=v1.28.3
+GOLANGCI_VERSION=v1.32.2
 
 .PHONY: setup
 setup:  ## Install dev tools
