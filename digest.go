@@ -302,16 +302,16 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	// Copy the request so we don't modify the input.
-	req2 := new(http.Request)
-	*req2 = *req
-	req2.Header = make(http.Header)
+	origReq := new(http.Request)
+	*origReq = *req
+	origReq.Header = make(http.Header, len(req.Header))
 	for k, s := range req.Header {
-		req2.Header[k] = s
+		origReq.Header[k] = s
 	}
 
 	// We'll need the request body twice. In some cases we can use GetBody
 	// to obtain a fresh reader for the second request, which we do right
-	// before the RoundTrip(req2) call. If GetBody is unavailable, read
+	// before the RoundTrip(origReq) call. If GetBody is unavailable, read
 	// the body into a memory buffer and use it for both requests.
 	if req.Body != nil && req.GetBody == nil {
 		body, err := ioutil.ReadAll(req.Body)
@@ -319,27 +319,21 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 			return nil, err
 		}
 		req.Body = ioutil.NopCloser(bytes.NewBuffer(body))
-		req2.Body = ioutil.NopCloser(bytes.NewBuffer(body))
+		origReq.Body = ioutil.NopCloser(bytes.NewBuffer(body))
 	}
 	// Make a request to get the 401 that contains the challenge.
-	resp, err := t.Transport.RoundTrip(req)
-	if err != nil {
-		return nil, err
+	challenge, resp, err := t.fetchChallenge(req)
+	if challenge == "" || err != nil {
+		return resp, err
 	}
-	if resp.StatusCode != http.StatusUnauthorized {
-		return resp, nil
-	}
-	// We'll no longer use the initial response, so close it
-	resp.Body.Close()
 
-	chal := resp.Header.Get("WWW-Authenticate")
-	c, err := parseChallenge(chal)
+	c, err := parseChallenge(challenge)
 	if err != nil {
 		return nil, err
 	}
 
 	// Form credentials based on the challenge.
-	cr, err := t.newCredentials(req2, c)
+	cr, err := t.newCredentials(origReq, c)
 	if err != nil {
 		return nil, err
 	}
@@ -350,15 +344,42 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	// Obtain a fresh body.
 	if req.Body != nil && req.GetBody != nil {
-		req2.Body, err = req.GetBody()
+		origReq.Body, err = req.GetBody()
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	// Make authenticated request.
-	req2.Header.Set("Authorization", auth)
-	return t.Transport.RoundTrip(req2)
+	origReq.Header.Set("Authorization", auth)
+	return t.Transport.RoundTrip(origReq)
+}
+
+func (t *Transport) fetchChallenge(req *http.Request) (string, *http.Response, error) {
+	resp, err := t.Transport.RoundTrip(req)
+	if err != nil {
+		return "", resp, err
+	}
+	if resp.StatusCode != http.StatusUnauthorized {
+		return "", resp, nil
+	}
+
+	// We'll no longer use the initial response, so close it
+	defer func() {
+		// Ensure the response body is fully read and closed
+		// before we reconnect, so that we reuse the same TCP connection.
+		// Close the previous response's body. But read at least some of
+		// the body so if it's small the underlying TCP connection will be
+		// re-used. No need to check for errors: if it fails, the Transport
+		// won't reuse it anyway.
+		const maxBodySlurpSize = 2 << 10
+		if resp.ContentLength == -1 || resp.ContentLength <= maxBodySlurpSize {
+			_, _ = io.CopyN(ioutil.Discard, resp.Body, maxBodySlurpSize)
+		}
+
+		resp.Body.Close()
+	}()
+	return resp.Header.Get("WWW-Authenticate"), resp, nil
 }
 
 // Client returns an HTTP client that uses the digest transport.

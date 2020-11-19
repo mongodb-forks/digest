@@ -1,6 +1,5 @@
-[![GoDoc](https://godoc.org/github.com/mongodb-forks/digest?status.svg)](https://godoc.org/github.com/mongodb-forks/digest)
-
-![.github/workflows/pr.yml](https://github.com/mongodb-forks/digest/workflows/.github/workflows/pr.yml/badge.svg?branch=master&event=push)
+![Build Status](https://github.com/mongodb-forks/digest/workflows/CI/badge.svg)
+[![GoDoc](https://img.shields.io/static/v1?label=godoc&message=reference&color=blue)](https://pkg.go.dev/github.com/mongodb-forks/digest)
 
 # Golang HTTP Digest Authentication
 
