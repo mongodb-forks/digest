@@ -25,15 +25,12 @@ The code is linted with [golangci-lint](https://golangci-lint.run/).  This libra
 
 Before submitting a PR, please run `make setup link-git-hooks` to set up your local development environment.
 
-## Fork Maintainer
-
-Bob Ziuchkovski (@bobziuchkovski)
-
 ## Original Authors
 
-Bipasa Chattopadhyay <bipasa@cs.unc.edu>
-Eric Gavaletz <gavaletz@gmail.com>
-Seon-Wook Park <seon.wook@swook.net>
+- Bipasa Chattopadhyay <bipasa@cs.unc.edu>
+- Eric Gavaletz <gavaletz@gmail.com>
+- Seon-Wook Park <seon.wook@swook.net>
+- Bob Ziuchkovski (@bobziuchkovski)
 
 ## License
 
