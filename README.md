@@ -1,6 +1,5 @@
-![Build Status](https://github.com/mongodb-forks/digest/workflows/CI/badge.svg)
 [![GoDoc](https://img.shields.io/static/v1?label=godoc&message=reference&color=blue)](https://pkg.go.dev/github.com/mongodb-forks/digest)
-
+![CI](https://github.com/mongodb-forks/digest/workflows/CI/badge.svg)
 # Golang HTTP Digest Authentication
 
 ## Overview
