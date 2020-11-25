@@ -15,7 +15,7 @@ jobs:
       - name: lint
         uses: golangci/golangci-lint-action@v2.3.0
         with:
-          version: latest
+          version: v1.33.0
 
   tests-on-unix:
     needs: golangci-lint # run after golangci-lint action to not produce duplicated errors
@@ -28,12 +28,14 @@ jobs:
           - 1.14
           - 1.15
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout repository
+        uses: actions/checkout@v2
       - name: Install Go
         uses: actions/setup-go@v2
         with:
           go-version: ${{ matrix.golang }}
-      - uses: actions/cache@v2
+      - name: Cache Dependencies
+        uses: actions/cache@v2
         with:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ matrix.golang }}-${{ hashFiles('**/go.sum') }}
