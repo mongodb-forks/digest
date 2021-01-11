@@ -29,13 +29,15 @@ linters:
     - depguard
     - dogsled
     - errcheck
-    - exportloopref
+    - exhaustive
+    - gochecknoinits
     - goconst
     - gocritic
     - gocyclo
     - gofmt
     - goimports
     - golint
+    - gomnd
     - goprintffuncname
     - gosec
     - gosimple
@@ -44,8 +46,10 @@ linters:
     - interfacer
     - misspell
     - nakedret
+    - noctx
     - nolintlint
     - rowserrcheck
+    - scopelint
     - staticcheck
     - structcheck
     - stylecheck
@@ -56,22 +60,21 @@ linters:
     - varcheck
     - whitespace
 
-  # don't enable:
-  # - gochecknoinits
-  # - funlen
-  # - lll
-  # - gomnd
-  # - asciicheck
-  # - gochecknoglobals
-  # - gocognit
-  # - godot
-  # - godox
-  # - goerr113
-  # - maligned
-  # - nestif
-  # - prealloc
-  # - testpackage
-  # - wsl
+    # don't enable:
+    # - asciicheck
+    # - dupl
+    # - funlen
+    # - gochecknoglobals
+    # - gocognit
+    # - godot
+    # - godox
+    # - goerr113
+    # - lll
+    # - maligned
+    # - nestif
+    # - prealloc
+    # - testpackage
+    # - wsl
 
 run:
   tests: true

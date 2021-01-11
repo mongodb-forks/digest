@@ -37,41 +37,47 @@ func TestH(t *testing.T) {
 			"r2":          "GET:/dir/index.html",
 			"expected_r1": "939e7578ed9e3c518a452acee763bce9",
 			"expected_r2": "39aff3a2bab6126f332b942af96d3366",
-			"expected_r3": "6629fae49393a05397450978507c4ef1",
+			"expected_r3": "72e6fcaeee7554ad095e1147cd8f3f13",
 		},
 		"SHA-256": {
 			"r1":          "Mufasa:testrealm@host.com:Circle Of Life",
 			"r2":          "GET:/dir/index.html",
 			"expected_r1": "3ba6cd94661c5ef34598040c868f13b8775df29109986be50ad35ae537dd3aa4",
 			"expected_r2": "9a3fdae9a622fe8de177c24fa9c070f2b181ec85e15dcbdc32e10c82ad450b04",
-			"expected_r3": "5abdd07184ba512a22c53f41470e5eea7dcaa3a93a59b630c13dfe0a5dc6e38b",
+			"expected_r3": "705e2bcd4503344546454cc767a5e3107dc09f86dc898d840fff18b257f0b62f",
 		},
 	}
 
 	for testType, values := range testCases {
-		t.Run(testType, func(t *testing.T) {
+		r1 := values["r1"]
+		expectedR1 := values["expected_r1"]
+		r2 := values["r2"]
+		expectedR2 := values["expected_r2"]
+		expectedR3 := values["expected_r3"]
+		tt := testType
+		t.Run(tt, func(t *testing.T) {
 			var err error
-			hFunc := testHashingFunc(testType)
-			r1, err := h(values["r1"], hFunc)
+			hFunc := testHashingFunc(tt)
+			r1Got, err := h(r1, hFunc)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if r1 != values["expected_r1"] {
-				t.Errorf("expected=%s, but got=%s\n", values["expected_r1"], r1)
+			if r1Got != expectedR1 {
+				t.Errorf("expectedR1=%s, but got=%s\n", expectedR1, r1Got)
 			}
-			r2, err := h(values["r2"], hFunc)
+			r2Got, err := h(r2, hFunc)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if r2 != values["expected_r2"] {
-				t.Errorf("expected=%s, but got=%s\n", values["expected_r2"], r2)
+			if r2Got != expectedR2 {
+				t.Errorf("expectedR2=%s, but got=%s\n", expectedR2, r2Got)
 			}
 			r3, err := h(fmt.Sprintf("%s:dcd98b7102dd2f0e8b11d0f600bfb0c093:00000001:0a4f113b:auth:%s", r1, r2), hFunc)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if r3 != values["expected_r3"] {
-				t.Errorf("expected=%s, but got=%s\n", values["expected_r3"], r3)
+			if r3 != expectedR3 {
+				t.Errorf("expectedR3=%s, but got=%s\n", expectedR3, r3)
 			}
 		})
 	}
@@ -92,13 +98,17 @@ func TestKd(t *testing.T) {
 	}
 
 	for testType, values := range testCases {
-		t.Run(testType, func(t *testing.T) {
-			hFunc := testHashingFunc(testType)
-			if r1, err := kd(values["secret"], values["data"], hFunc); r1 != values["expected"] {
+		secret := values["secret"]
+		data := values["data"]
+		expected := values["expected"]
+		tt := testType
+		t.Run(tt, func(t *testing.T) {
+			hFunc := testHashingFunc(tt)
+			if r1, err := kd(secret, data, hFunc); r1 != expected {
 				if err != nil {
 					t.Fatal(err)
 				}
-				t.Errorf("expected=%s, but got=%s\n", values["expected"], r1)
+				t.Errorf("expected=%s, but got=%s\n", expected, r1)
 			}
 		})
 	}
@@ -115,25 +125,27 @@ func TestHa1(t *testing.T) {
 	}
 
 	for testType, values := range testCases {
-		t.Run(testType, func(t *testing.T) {
-			hFunc := testHashingFunc(testType)
+		expected := values["expected"]
+		tt := testType
+		t.Run(tt, func(t *testing.T) {
+			hFunc := testHashingFunc(tt)
 			cred := &credentials{
 				Username:   "Mufasa",
 				Realm:      "testrealm@host.com",
 				Nonce:      "dcd98b7102dd2f0e8b11d0f600bfb0c093",
 				DigestURI:  "/dir/index.html",
-				Algorithm:  testType,
+				Algorithm:  tt,
 				Opaque:     "5ccc069c403ebaf9f0171e9517f40e41",
 				MessageQop: "auth",
 				method:     "GET",
 				password:   "Circle Of Life",
 				impl:       hFunc,
 			}
-			if r1, err := cred.ha1(); r1 != values["expected"] {
+			if r1, err := cred.ha1(); r1 != expected {
 				if err != nil {
 					t.Fatal(err)
 				}
-				t.Errorf("expected=%s, but got=%s\n", values["expected"], r1)
+				t.Errorf("expected=%s, but got=%s\n", expected, r1)
 			}
 		})
 	}
@@ -150,25 +162,27 @@ func TestHa2(t *testing.T) {
 	}
 
 	for testType, values := range testCases {
-		t.Run(testType, func(t *testing.T) {
-			hFunc := testHashingFunc(testType)
+		expected := values["expected"]
+		tt := testType
+		t.Run(tt, func(t *testing.T) {
+			hFunc := testHashingFunc(tt)
 			cred := &credentials{
 				Username:   "Mufasa",
 				Realm:      "testrealm@host.com",
 				Nonce:      "dcd98b7102dd2f0e8b11d0f600bfb0c093",
 				DigestURI:  "/dir/index.html",
-				Algorithm:  testType,
+				Algorithm:  tt,
 				Opaque:     "5ccc069c403ebaf9f0171e9517f40e41",
 				MessageQop: "auth",
 				method:     "GET",
 				password:   "Circle Of Life",
 				impl:       hFunc,
 			}
-			if r1, err := cred.ha2(); r1 != values["expected"] {
+			if r1, err := cred.ha2(); r1 != expected {
 				if err != nil {
 					t.Fatal(err)
 				}
-				t.Errorf("expected=%s, but got=%s\n", values["expected"], r1)
+				t.Errorf("expected=%s, but got=%s\n", expected, r1)
 			}
 		})
 	}
@@ -185,22 +199,24 @@ func TestResp(t *testing.T) {
 	}
 
 	for testType, values := range testCases {
-		t.Run(testType, func(t *testing.T) {
-			hFunc := testHashingFunc(testType)
+		expected := values["expected"]
+		tt := testType
+		t.Run(tt, func(t *testing.T) {
+			hFunc := testHashingFunc(tt)
 			cred := &credentials{
 				Username:   "Mufasa",
 				Realm:      "testrealm@host.com",
 				Nonce:      "dcd98b7102dd2f0e8b11d0f600bfb0c093",
 				DigestURI:  "/dir/index.html",
-				Algorithm:  testType,
+				Algorithm:  tt,
 				Opaque:     "5ccc069c403ebaf9f0171e9517f40e41",
 				MessageQop: "auth",
 				method:     "GET",
 				password:   "Circle Of Life",
 				impl:       hFunc,
 			}
-			if r1, err := cred.resp(cnonce); err != nil || r1 != values["expected"] {
-				t.Errorf("expected=%s, but got=%s\n", values["expected"], r1)
+			if r1, err := cred.resp(cnonce); err != nil || r1 != expected {
+				t.Errorf("expected=%s, but got=%s\n", expected, r1)
 			}
 		})
 	}

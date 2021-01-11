@@ -1,7 +1,5 @@
-[![GoDoc](https://godoc.org/github.com/mongodb-forks/digest?status.svg)](https://godoc.org/github.com/mongodb-forks/digest)
-
-![.github/workflows/pr.yml](https://github.com/mongodb-forks/digest/workflows/.github/workflows/pr.yml/badge.svg?branch=master&event=push)
-
+[![GoDoc](https://img.shields.io/static/v1?label=godoc&message=reference&color=blue)](https://pkg.go.dev/github.com/mongodb-forks/digest)
+![CI](https://github.com/mongodb-forks/digest/workflows/CI/badge.svg)
 # Golang HTTP Digest Authentication
 
 ## Overview
@@ -27,15 +25,12 @@ The code is linted with [golangci-lint](https://golangci-lint.run/).  This libra
 
 Before submitting a PR, please run `make setup link-git-hooks` to set up your local development environment.
 
-## Fork Maintainer
-
-Bob Ziuchkovski (@bobziuchkovski)
-
 ## Original Authors
 
-Bipasa Chattopadhyay <bipasa@cs.unc.edu>
-Eric Gavaletz <gavaletz@gmail.com>
-Seon-Wook Park <seon.wook@swook.net>
+- Bipasa Chattopadhyay <bipasa@cs.unc.edu>
+- Eric Gavaletz <gavaletz@gmail.com>
+- Seon-Wook Park <seon.wook@swook.net>
+- Bob Ziuchkovski (@bobziuchkovski)
 
 ## License
 

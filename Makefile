@@ -1,4 +1,7 @@
-GOLANGCI_VERSION=v1.28.3
+# A Self-Documenting Makefile: http://marmelab.com/blog/2016/02/29/auto-documented-makefile.html
+
+GOLANGCI_VERSION=v1.32.2
+COVERAGE=coverage.out
 
 .PHONY: setup
 setup:  ## Install dev tools
@@ -28,20 +31,17 @@ fix-lint: ## Fix linting errors
 	@echo "==> Fixing lint errors"
 	@./bin/golangci-lint run --fix
 
-.PHONY: build
-build: ## Build the library
-	@echo "==>"
-	@echo "==> Building the code"
-	@go build ./...
-
 .PHONY: test
 test: ## Run the tests
 	@echo "==>"
 	@echo "==> Running tests"
-	@go test ./...
+	@go test -race -cover -count=1 -coverprofile ${COVERAGE} ./...
+
+.PHONY: check
+check: test fix-lint
 
 .PHONY: all
-all: fmt lint build test ## Run all targets
+all: fmt test lint ## Run all targets
 
 .PHONY: link-git-hooks
 link-git-hooks: ## Install git hooks
