@@ -1,5 +1,6 @@
-[![GoDoc](https://img.shields.io/static/v1?label=godoc&message=reference&color=blue)](https://pkg.go.dev/github.com/mongodb-forks/digest)
-![CI](https://github.com/mongodb-forks/digest/workflows/CI/badge.svg)
+[![Go Reference](https://pkg.go.dev/badge/github.com/mongodb-forks/digest.svg)](https://pkg.go.dev/github.com/mongodb-forks/digest)
+[![GO tests](https://github.com/mongodb-forks/digest/actions/workflows/go-test.yml/badge.svg)](https://github.com/mongodb-forks/digest/actions/workflows/go-test.yml)
+[![golangci-lint](https://github.com/mongodb-forks/digest/actions/workflows/golangci-lint.yml/badge.svg)](https://github.com/mongodb-forks/digest/actions/workflows/golangci-lint.yml)
 # Golang HTTP Digest Authentication
 
 ## Overview
