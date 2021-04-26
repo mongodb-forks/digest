@@ -16,8 +16,28 @@ This implementation now supports the SHA-256 algorithm which was added as part o
 
 ## Usage
 
-See the [godocs](https://godoc.org/github.com/bobziuchkovski/digest) for details.
-
+```go
+t := NewTransport("myUserName", "myP@55w0rd")
+req, err := http.NewRequest("GET", "http://notreal.com/path?arg=1", nil)
+if err != nil {
+	return err
+}
+resp, err := t.RoundTrip(req)
+if err != nil {
+	return err
+}
+```
+Or it can be used as a client:
+```go
+c, err := t.Client()
+if err != nil {
+	return err
+}
+resp, err := c.Get("http://notreal.com/path?arg=1")
+if err != nil {
+	return err
+}
+```
 ## Contributing
 
 **Contributions are welcome!**
