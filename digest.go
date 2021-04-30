@@ -72,7 +72,6 @@
 package digest
 
 import (
-	"bytes"
 	"crypto/md5"
 	"crypto/rand"
 	"crypto/sha256"
@@ -312,13 +311,10 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// to obtain a fresh reader for the second request, which we do right
 	// before the RoundTrip(origReq) call. If GetBody is unavailable, read
 	// the body into a memory buffer and use it for both requests.
-	if req.Body != nil && req.GetBody == nil {
-		body, err := ioutil.ReadAll(req.Body)
-		if err != nil {
-			return nil, err
-		}
-		req.Body = ioutil.NopCloser(bytes.NewBuffer(body))
-		origReq.Body = ioutil.NopCloser(bytes.NewBuffer(body))
+	if req.Body != nil || req.GetBody == nil {
+		req.Body = nil
+		req.GetBody = nil
+		req.ContentLength = 0
 	}
 	// Make a request to get the 401 that contains the challenge.
 	challenge, resp, err := t.fetchChallenge(req)
