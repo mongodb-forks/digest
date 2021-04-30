@@ -307,15 +307,14 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		origReq.Header[k] = s
 	}
 
-	// We'll need the request body twice. In some cases we can use GetBody
-	// to obtain a fresh reader for the second request, which we do right
-	// before the RoundTrip(origReq) call. If GetBody is unavailable, read
-	// the body into a memory buffer and use it for both requests.
+
+	// Do not send the body on the first request
 	if req.Body != nil || req.GetBody == nil {
 		req.Body = nil
 		req.GetBody = nil
 		req.ContentLength = 0
 	}
+
 	// Make a request to get the 401 that contains the challenge.
 	challenge, resp, err := t.fetchChallenge(req)
 	if challenge == "" || err != nil {
