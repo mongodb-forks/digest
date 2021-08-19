@@ -73,7 +73,7 @@ package digest
 
 import (
 	"bytes"
-	"crypto/md5"
+	"crypto/md5" //nolint:gosec // valid for digest
 	"crypto/rand"
 	"crypto/sha256"
 	"errors"
@@ -128,6 +128,7 @@ type challenge struct {
 func parseChallenge(input string) (*challenge, error) {
 	const ws = " \n\r\t"
 	const qs = `"`
+	const n = 2
 	s := strings.Trim(input, ws)
 	if !strings.HasPrefix(s, "Digest ") {
 		return nil, ErrBadChallenge
@@ -139,7 +140,7 @@ func parseChallenge(input string) (*challenge, error) {
 	}
 	var r []string
 	for i := range sl {
-		r = strings.SplitN(sl[i], "=", 2)
+		r = strings.SplitN(sl[i], "=", n)
 		switch r[0] {
 		case "realm":
 			c.Realm = strings.Trim(r[1], qs)
@@ -207,7 +208,8 @@ func (c *credentials) resp(cnonce string) (resp string, err error) {
 		if cnonce != "" {
 			c.Cnonce = cnonce
 		} else {
-			b := make([]byte, 8)
+			const size = 8
+			b := make([]byte, size)
 			_, err = io.ReadFull(rand.Reader, b)
 			if err != nil {
 				return "", err
