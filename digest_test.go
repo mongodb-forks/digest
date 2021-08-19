@@ -15,7 +15,7 @@
 package digest
 
 import (
-	"crypto/md5"
+	"crypto/md5" //nolint:gosec // valid for digest
 	"crypto/sha256"
 	"fmt"
 	"testing"
