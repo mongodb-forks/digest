@@ -11,8 +11,8 @@ jobs:
       fail-fast: false
       matrix:
         golang:
-          - 1.15
           - 1.16
+          - 1.17
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
