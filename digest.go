@@ -80,7 +80,6 @@ import (
 	"fmt"
 	"hash"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"strings"
 )
@@ -250,21 +249,21 @@ func (c *credentials) authorize() (string, error) {
 	if err != nil {
 		return "", ErrAlgNotImplemented
 	}
-	sl := []string{fmt.Sprintf(`username="%s"`, c.Username)}
-	sl = append(sl, fmt.Sprintf(`realm="%s"`, c.Realm),
-		fmt.Sprintf(`nonce="%s"`, c.Nonce),
-		fmt.Sprintf(`uri="%s"`, c.DigestURI),
-		fmt.Sprintf(`response="%s"`, resp))
+	sl := []string{fmt.Sprintf(`username=%q`, c.Username)}
+	sl = append(sl, fmt.Sprintf(`realm=%q`, c.Realm),
+		fmt.Sprintf(`nonce=%q`, c.Nonce),
+		fmt.Sprintf(`uri=%q`, c.DigestURI),
+		fmt.Sprintf(`response=%q`, resp))
 	if c.Algorithm != "" {
-		sl = append(sl, fmt.Sprintf(`algorithm="%s"`, c.Algorithm))
+		sl = append(sl, fmt.Sprintf(`algorithm=%q`, c.Algorithm))
 	}
 	if c.Opaque != "" {
-		sl = append(sl, fmt.Sprintf(`opaque="%s"`, c.Opaque))
+		sl = append(sl, fmt.Sprintf(`opaque=%q`, c.Opaque))
 	}
 	if c.MessageQop != "" {
 		sl = append(sl, fmt.Sprintf("qop=%s", c.MessageQop),
 			fmt.Sprintf("nc=%08x", c.NonceCount),
-			fmt.Sprintf(`cnonce="%s"`, c.Cnonce))
+			fmt.Sprintf(`cnonce=%q`, c.Cnonce))
 	}
 	return fmt.Sprintf("Digest %s", strings.Join(sl, ", ")), nil
 }
@@ -315,12 +314,12 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// before the RoundTrip(origReq) call. If GetBody is unavailable, read
 	// the body into a memory buffer and use it for both requests.
 	if req.Body != nil && req.GetBody == nil {
-		body, err := ioutil.ReadAll(req.Body)
+		body, err := io.ReadAll(req.Body)
 		if err != nil {
 			return nil, err
 		}
-		req.Body = ioutil.NopCloser(bytes.NewBuffer(body))
-		origReq.Body = ioutil.NopCloser(bytes.NewBuffer(body))
+		req.Body = io.NopCloser(bytes.NewBuffer(body))
+		origReq.Body = io.NopCloser(bytes.NewBuffer(body))
 	}
 	// Make a request to get the 401 that contains the challenge.
 	challenge, resp, err := t.fetchChallenge(req)
@@ -375,7 +374,7 @@ func (t *Transport) fetchChallenge(req *http.Request) (string, *http.Response, e
 		// won't reuse it anyway.
 		const maxBodySlurpSize = 2 << 10
 		if resp.ContentLength == -1 || resp.ContentLength <= maxBodySlurpSize {
-			_, _ = io.CopyN(ioutil.Discard, resp.Body, maxBodySlurpSize)
+			_, _ = io.CopyN(io.Discard, resp.Body, maxBodySlurpSize)
 		}
 
 		resp.Body.Close()
