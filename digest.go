@@ -114,6 +114,16 @@ func NewTransport(username, password string) *Transport {
 	return t
 }
 
+// NewTransportWithHTTPTransport creates a new digest transport using the supplied http.Transport.
+func NewTransportWithHTTPTransport(username, password string, transport *http.Transport) *Transport {
+	t := &Transport{
+		Username:  username,
+		Password:  password,
+		Transport: transport,
+	}
+	return t
+}
+
 type challenge struct {
 	Realm     string
 	Domain    string
