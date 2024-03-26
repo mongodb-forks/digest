@@ -124,6 +124,16 @@ func NewTransportWithHTTPTransport(username, password string, transport *http.Tr
 	return t
 }
 
+// NewTransportWithHTTPRoundTripper creates a new digest transport using the supplied http.RoundTripper interface.
+func NewTransportWithHTTPRoundTripper(username, password string, transport http.RoundTripper) *Transport {
+	t := &Transport{
+		Username:  username,
+		Password:  password,
+		Transport: transport,
+	}
+	return t
+}
+
 type challenge struct {
 	Realm     string
 	Domain    string
