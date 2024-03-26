@@ -124,6 +124,16 @@ func NewTransportWithHTTPTransport(username, password string, transport *http.Tr
 	return t
 }
 
+
+func NewTransportWithHTTPRoundTripper(username, password string, transport http.RoundTripper) *Transport {
+	t := &Transport{
+		Username:  username,
+		Password:  password,
+		Transport: transport,
+	}
+	return t
+}
+
 type challenge struct {
 	Realm     string
 	Domain    string
