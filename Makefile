@@ -1,6 +1,6 @@
 # A Self-Documenting Makefile: http://marmelab.com/blog/2016/02/29/auto-documented-makefile.html
 
-GOLANGCI_VERSION=v1.56.1
+GOLANGCI_VERSION=v2.1.6
 COVERAGE=coverage.out
 
 .PHONY: setup
