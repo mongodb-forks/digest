@@ -223,7 +223,8 @@ func (c *credentials) resp(cnonce string) (resp string, err error) {
 	var ha1 string
 	var ha2 string
 	c.NonceCount++
-	if c.MessageQop == MsgAuth {
+	switch c.MessageQop {
+	case MsgAuth:
 		if cnonce != "" {
 			c.Cnonce = cnonce
 		} else {
@@ -242,7 +243,7 @@ func (c *credentials) resp(cnonce string) (resp string, err error) {
 			return "", err
 		}
 		return kd(ha1, fmt.Sprintf("%s:%08x:%s:%s:%s", c.Nonce, c.NonceCount, c.Cnonce, c.MessageQop, ha2), c.impl)
-	} else if c.MessageQop == "" {
+	case "":
 		if ha1, err = c.ha1(); err != nil {
 			return "", err
 		}
