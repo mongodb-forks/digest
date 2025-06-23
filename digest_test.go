@@ -216,9 +216,10 @@ func TestResp(t *testing.T) {
 }
 
 func testHashingFunc(testType string) hashingFunc {
-	if testType == "MD5" {
+	switch testType {
+	case "MD5":
 		return md5.New
-	} else if testType == "SHA-256" {
+	case "SHA-256":
 		return sha256.New
 	}
 	return nil
