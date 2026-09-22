@@ -88,6 +88,13 @@ const (
 	MsgAuth   string = "auth"
 	AlgMD5    string = "MD5"
 	AlgSha256 string = "SHA-256"
+
+	// DefaultMaxStaleRetries is the default maximum number of times RoundTrip
+	// will retry after receiving a 401 with stale=true (RFC 7616 §3.2). Each
+	// retry obtains a fresh nonce via a new challenge-response cycle. A bound
+	// prevents infinite loops against a misconfigured server that always
+	// returns stale=true. Override per-Transport via the MaxStaleRetries field.
+	DefaultMaxStaleRetries = 3
 )
 
 var (
@@ -102,6 +109,12 @@ type Transport struct {
 	Username  string
 	Password  string
 	Transport http.RoundTripper
+
+	// MaxStaleRetries is the maximum number of times RoundTrip will retry
+	// after receiving a 401 with stale=true (RFC 7616 §3.2). A value of 0
+	// uses DefaultMaxStaleRetries. A negative value disables stale retry
+	// entirely (the 401 is returned to the caller without retry).
+	MaxStaleRetries int
 }
 
 // NewTransport creates a new digest transport using the http.DefaultTransport.
@@ -315,13 +328,68 @@ func (t *Transport) newCredentials(req *http.Request, c *challenge) (*credential
 }
 
 // RoundTrip makes a request expecting a 401 response that will require digest
-// authentication.  It creates the credentials it needs and makes a follow-up
-// request.
+// authentication. It creates the credentials it needs and makes a follow-up
+// request. If the server responds with 401 and stale=true (RFC 7616 §3.2),
+// it retries with a fresh challenge, up to t.MaxStaleRetries times.
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if t.Transport == nil {
 		return nil, ErrNilTransport
 	}
 
+	// Resolve the stale retry limit. 0 means default, negative disables.
+	maxRetries := t.MaxStaleRetries
+	if maxRetries == 0 {
+		maxRetries = DefaultMaxStaleRetries
+	}
+
+	// We'll need the request body multiple times (challenge request,
+	// authenticated request, and potentially stale-nonce retries).
+	// If GetBody is unavailable, read the body into a memory buffer so
+	// we can replay it. If GetBody is available, doDigestAuth will call
+	// it to obtain fresh readers for each request.
+	var bodyBytes []byte
+	if req.Body != nil && req.GetBody == nil {
+		var err error
+		bodyBytes, err = io.ReadAll(req.Body)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// RFC 7616 §3.2: if the server returns 401 with stale=true, the nonce
+	// has expired but the credentials are valid. Retry with a fresh
+	// challenge, up to maxRetries times. A genuine credential failure
+	// (stale=false or absent) is returned as-is without retry.
+	for staleRetries := 0; ; staleRetries++ {
+		resp, err := t.doDigestAuth(req, bodyBytes)
+		if err != nil {
+			return nil, err
+		}
+
+		if resp.StatusCode != http.StatusUnauthorized || staleRetries >= maxRetries {
+			return resp, nil
+		}
+
+		wwwAuth := resp.Header.Get("WWW-Authenticate")
+		if wwwAuth == "" {
+			return resp, nil
+		}
+		c, parseErr := parseChallenge(wwwAuth)
+		if parseErr != nil || !strings.EqualFold(c.Stale, "true") {
+			return resp, nil
+		}
+
+		// Stale nonce — close the response and retry with a fresh challenge.
+		resp.Body.Close()
+	}
+}
+
+// doDigestAuth performs one complete digest challenge-response cycle.
+// It sends an unauthenticated request to obtain the challenge, then sends
+// an authenticated request with the computed Authorization header.
+// bodyBytes is the buffered request body (nil if GetBody is available or
+// there is no body).
+func (t *Transport) doDigestAuth(req *http.Request, bodyBytes []byte) (*http.Response, error) {
 	// Copy the request so we don't modify the input.
 	origReq := new(http.Request)
 	*origReq = *req
@@ -330,18 +398,21 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		origReq.Header[k] = s
 	}
 
-	// We'll need the request body twice. In some cases we can use GetBody
-	// to obtain a fresh reader for the second request, which we do right
-	// before the RoundTrip(origReq) call. If GetBody is unavailable, read
-	// the body into a memory buffer and use it for both requests.
-	if req.Body != nil && req.GetBody == nil {
-		body, err := io.ReadAll(req.Body)
-		if err != nil {
-			return nil, err
+	// Prepare fresh request bodies for both the challenge request and the
+	// authenticated request.
+	if req.Body != nil {
+		if bodyBytes != nil {
+			req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+			origReq.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+		} else if req.GetBody != nil {
+			b, err := req.GetBody()
+			if err != nil {
+				return nil, err
+			}
+			req.Body = b
 		}
-		req.Body = io.NopCloser(bytes.NewBuffer(body))
-		origReq.Body = io.NopCloser(bytes.NewBuffer(body))
 	}
+
 	// Make a request to get the 401 that contains the challenge.
 	challenge, resp, err := t.fetchChallenge(req)
 	if challenge == "" || err != nil {
@@ -363,7 +434,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 
-	// Obtain a fresh body.
+	// Obtain a fresh body for the authenticated request.
 	if req.Body != nil && req.GetBody != nil {
 		origReq.Body, err = req.GetBody()
 		if err != nil {
