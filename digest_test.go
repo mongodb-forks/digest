@@ -18,6 +18,10 @@ import (
 	"crypto/md5" //nolint:gosec // valid for digest
 	"crypto/sha256"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -223,4 +227,341 @@ func testHashingFunc(testType string) hashingFunc {
 		return sha256.New
 	}
 	return nil
+}
+
+// TestStaleNonceRetry verifies that RoundTrip retries when the server
+// returns 401 with stale=true (RFC 7616 §3.2), and succeeds on a later
+// challenge-response cycle.
+func TestStaleNonceRetry(t *testing.T) {
+	totalRequests := 0
+	authRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		totalRequests++
+		auth := r.Header.Get("Authorization")
+
+		if auth == "" {
+			// Unauthenticated request — return challenge.
+			w.Header().Set("WWW-Authenticate", `Digest realm="test", nonce="test-nonce", qop="auth"`)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		authRequests++
+		if authRequests == 1 {
+			// First auth'd request — nonce is stale.
+			w.Header().Set("WWW-Authenticate", `Digest realm="test", nonce="test-nonce", qop="auth", stale=true`)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		// Second auth'd request — success.
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("success"))
+	}))
+	defer server.Close()
+
+	transport := &Transport{
+		Username:  "user",
+		Password:  "pass",
+		Transport: http.DefaultTransport,
+	}
+
+	client := &http.Client{Transport: transport}
+	resp, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+
+	// 4 total requests: 2 challenges (unauth'd) + 2 auth'd (first stale, second success).
+	if totalRequests != 4 {
+		t.Errorf("expected 4 total requests, got %d", totalRequests)
+	}
+}
+
+// TestNonStale401NoRetry verifies that RoundTrip does NOT retry when the
+// server returns 401 without stale=true (genuine credential failure).
+func TestNonStale401NoRetry(t *testing.T) {
+	totalRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		totalRequests++
+		auth := r.Header.Get("Authorization")
+
+		if auth == "" {
+			w.Header().Set("WWW-Authenticate", `Digest realm="test", nonce="test-nonce", qop="auth"`)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		// Auth'd request — 401 without stale=true (genuine failure).
+		w.Header().Set("WWW-Authenticate", `Digest realm="test", nonce="test-nonce", qop="auth"`)
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	transport := &Transport{
+		Username:  "user",
+		Password:  "pass",
+		Transport: http.DefaultTransport,
+	}
+
+	client := &http.Client{Transport: transport}
+	resp, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", resp.StatusCode)
+	}
+
+	// 2 total requests: 1 challenge + 1 auth'd. No retry.
+	if totalRequests != 2 {
+		t.Errorf("expected 2 total requests, got %d", totalRequests)
+	}
+}
+
+// TestStaleNonceRetryWithBody verifies that the request body is correctly
+// replayed on a stale-nonce retry for a POST request.
+func TestStaleNonceRetryWithBody(t *testing.T) {
+	authRequests := 0
+	var lastBody string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
+		body, _ := io.ReadAll(r.Body)
+
+		if auth == "" {
+			w.Header().Set("WWW-Authenticate", `Digest realm="test", nonce="test-nonce", qop="auth"`)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		authRequests++
+		lastBody = string(body)
+
+		if authRequests == 1 {
+			w.Header().Set("WWW-Authenticate", `Digest realm="test", nonce="test-nonce", qop="auth", stale=true`)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	transport := &Transport{
+		Username:  "user",
+		Password:  "pass",
+		Transport: http.DefaultTransport,
+	}
+
+	client := &http.Client{Transport: transport}
+
+	// strings.NewReader gets a GetBody from http.NewRequest, exercising
+	// the GetBody replay path.
+	req, err := http.NewRequest("POST", server.URL, strings.NewReader("test body content"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+
+	if lastBody != "test body content" {
+		t.Errorf("expected body to be replayed, got %q", lastBody)
+	}
+}
+
+// TestStaleNonceRetryMultiple verifies that RoundTrip retries multiple times
+// when the server keeps returning stale=true, and eventually succeeds.
+func TestStaleNonceRetryMultiple(t *testing.T) {
+	totalRequests := 0
+	authRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		totalRequests++
+		auth := r.Header.Get("Authorization")
+
+		if auth == "" {
+			w.Header().Set("WWW-Authenticate", `Digest realm="test", nonce="test-nonce", qop="auth"`)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		authRequests++
+		if authRequests < 3 {
+			// First two auth'd requests — stale.
+			w.Header().Set("WWW-Authenticate", `Digest realm="test", nonce="test-nonce", qop="auth", stale=true`)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		// Third auth'd request — success.
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	transport := &Transport{
+		Username:  "user",
+		Password:  "pass",
+		Transport: http.DefaultTransport,
+	}
+
+	client := &http.Client{Transport: transport}
+	resp, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+
+	// 3 challenge cycles × 2 requests each (unauth'd + auth'd) = 6 total.
+	if totalRequests != 6 {
+		t.Errorf("expected 6 total requests, got %d", totalRequests)
+	}
+}
+
+// TestStaleNonceRetryMaxBound verifies that RoundTrip stops retrying after
+// DefaultMaxStaleRetries when the server always returns stale=true, and
+// returns the final 401 to the caller.
+func TestStaleNonceRetryMaxBound(t *testing.T) {
+	totalRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		totalRequests++
+		auth := r.Header.Get("Authorization")
+
+		if auth == "" {
+			w.Header().Set("WWW-Authenticate", `Digest realm="test", nonce="test-nonce", qop="auth"`)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		// Always stale — never succeeds.
+		w.Header().Set("WWW-Authenticate", `Digest realm="test", nonce="test-nonce", qop="auth", stale=true`)
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	transport := &Transport{
+		Username:  "user",
+		Password:  "pass",
+		Transport: http.DefaultTransport,
+	}
+
+	client := &http.Client{Transport: transport}
+	resp, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", resp.StatusCode)
+	}
+
+	// (DefaultMaxStaleRetries + 1) challenge cycles × 2 requests each = 8 total.
+	expected := (DefaultMaxStaleRetries + 1) * 2
+	if totalRequests != expected {
+		t.Errorf("expected %d total requests, got %d", expected, totalRequests)
+	}
+}
+
+// TestStaleNonceRetryCustomMax verifies that MaxStaleRetries on the Transport
+// overrides the default.
+func TestStaleNonceRetryCustomMax(t *testing.T) {
+	totalRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		totalRequests++
+		auth := r.Header.Get("Authorization")
+
+		if auth == "" {
+			w.Header().Set("WWW-Authenticate", `Digest realm="test", nonce="test-nonce", qop="auth"`)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		w.Header().Set("WWW-Authenticate", `Digest realm="test", nonce="test-nonce", qop="auth", stale=true`)
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	transport := &Transport{
+		Username:        "user",
+		Password:        "pass",
+		Transport:       http.DefaultTransport,
+		MaxStaleRetries: 1,
+	}
+
+	client := &http.Client{Transport: transport}
+	resp, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", resp.StatusCode)
+	}
+
+	// (1 + 1) challenge cycles × 2 requests each = 4 total.
+	if totalRequests != 4 {
+		t.Errorf("expected 4 total requests, got %d", totalRequests)
+	}
+}
+
+// TestStaleNonceRetryDisabled verifies that a negative MaxStaleRetries
+// disables stale retry entirely — the 401 is returned without retry.
+func TestStaleNonceRetryDisabled(t *testing.T) {
+	totalRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		totalRequests++
+		auth := r.Header.Get("Authorization")
+
+		if auth == "" {
+			w.Header().Set("WWW-Authenticate", `Digest realm="test", nonce="test-nonce", qop="auth"`)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		w.Header().Set("WWW-Authenticate", `Digest realm="test", nonce="test-nonce", qop="auth", stale=true`)
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	transport := &Transport{
+		Username:        "user",
+		Password:        "pass",
+		Transport:       http.DefaultTransport,
+		MaxStaleRetries: -1,
+	}
+
+	client := &http.Client{Transport: transport}
+	resp, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", resp.StatusCode)
+	}
+
+	// 1 challenge cycle × 2 requests = 2 total. No stale retry.
+	if totalRequests != 2 {
+		t.Errorf("expected 2 total requests, got %d", totalRequests)
+	}
 }
