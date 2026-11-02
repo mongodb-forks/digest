@@ -108,7 +108,7 @@ type Transport struct {
 	// authentication. A server rejects an unauthenticated request before it reads
 	// the body, and a body still in flight when the connection closes fails with
 	// "write: broken pipe". The authenticated request always carries the full body.
-	// Not compatible with qop=auth-int.
+	// The package does not implement qop=auth-int.
 	ChallengeWithoutBody bool
 }
 
