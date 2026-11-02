@@ -102,6 +102,14 @@ type Transport struct {
 	Username  string
 	Password  string
 	Transport http.RoundTripper
+
+	// ChallengeWithoutBody sends the unauthenticated challenge request with an
+	// empty body. Set it when every request to the host requires digest
+	// authentication. A server rejects an unauthenticated request before it reads
+	// the body, and a body still in flight when the connection closes fails with
+	// "write: broken pipe". The authenticated request always carries the full body.
+	// The package does not implement qop=auth-int.
+	ChallengeWithoutBody bool
 }
 
 // NewTransport creates a new digest transport using the http.DefaultTransport.
@@ -377,6 +385,12 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func (t *Transport) fetchChallenge(req *http.Request) (string, *http.Response, error) {
+	if t.ChallengeWithoutBody {
+		req = req.Clone(req.Context())
+		req.Body = http.NoBody
+		req.ContentLength = 0
+		req.GetBody = nil
+	}
 	resp, err := t.Transport.RoundTrip(req)
 	if err != nil {
 		return "", resp, err
