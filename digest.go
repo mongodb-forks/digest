@@ -385,7 +385,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func (t *Transport) fetchChallenge(req *http.Request) (string, *http.Response, error) {
-	if t.ChallengeWithoutBody && req.Body != nil && req.Body != http.NoBody {
+	if t.ChallengeWithoutBody {
 		req = req.Clone(req.Context())
 		req.Body = http.NoBody
 		req.ContentLength = 0
