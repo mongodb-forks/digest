@@ -15,9 +15,13 @@
 package digest
 
 import (
+	"bytes"
 	"crypto/md5" //nolint:gosec // valid for digest
 	"crypto/sha256"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -223,4 +227,65 @@ func testHashingFunc(testType string) hashingFunc {
 		return sha256.New
 	}
 	return nil
+}
+
+func TestChallengeWithoutBody(t *testing.T) {
+	const payloadSize = 1 << 20
+	payload := bytes.Repeat([]byte("a"), payloadSize)
+
+	testCases := []struct {
+		name                 string
+		challengeWithoutBody bool
+		wantChallengeLength  int64
+	}{
+		{"challenge without body", true, 0},
+		{"challenge with body", false, payloadSize},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var challengeLength, authLength int64
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, err := io.ReadAll(r.Body)
+				if err != nil {
+					t.Errorf("read body: %v", err)
+				}
+				if r.Header.Get("Authorization") == "" {
+					challengeLength = r.ContentLength
+					w.Header().Set("WWW-Authenticate", `Digest realm="test", nonce="abc", qop="auth", algorithm=MD5`)
+					w.Header().Set("Content-Length", "0")
+					w.WriteHeader(http.StatusUnauthorized)
+					return
+				}
+				authLength = int64(len(body))
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer srv.Close()
+
+			tr := &Transport{
+				Username:             "user",
+				Password:             "pass",
+				Transport:            http.DefaultTransport,
+				ChallengeWithoutBody: tc.challengeWithoutBody,
+			}
+			req, err := http.NewRequest(http.MethodPut, srv.URL, bytes.NewReader(payload))
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp, err := tr.RoundTrip(req)
+			if err != nil {
+				t.Fatalf("RoundTrip: %v", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+			}
+			if challengeLength != tc.wantChallengeLength {
+				t.Errorf("challenge body length = %d, want %d", challengeLength, tc.wantChallengeLength)
+			}
+			if authLength != payloadSize {
+				t.Errorf("authenticated body length = %d, want %d", authLength, payloadSize)
+			}
+		})
+	}
 }
