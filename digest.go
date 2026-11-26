@@ -80,6 +80,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"maps"
 	"net/http"
 	"strings"
 )
@@ -334,15 +335,13 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	origReq := new(http.Request)
 	*origReq = *req
 	origReq.Header = make(http.Header, len(req.Header))
-	for k, s := range req.Header {
-		origReq.Header[k] = s
-	}
+	maps.Copy(origReq.Header, req.Header)
 
 	// We'll need the request body twice. In some cases we can use GetBody
 	// to obtain a fresh reader for the second request, which we do right
 	// before the RoundTrip(origReq) call. If GetBody is unavailable, read
 	// the body into a memory buffer and use it for both requests.
-	if req.Body != nil && req.GetBody == nil {
+	if req.Body != nil && req.Body != http.NoBody && req.GetBody == nil {
 		body, err := io.ReadAll(req.Body)
 		if err != nil {
 			return nil, err

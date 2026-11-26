@@ -22,6 +22,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 )
 
@@ -285,6 +286,61 @@ func TestChallengeWithoutBody(t *testing.T) {
 			}
 			if authLength != payloadSize {
 				t.Errorf("authenticated body length = %d, want %d", authLength, payloadSize)
+			}
+		})
+	}
+}
+
+func TestRetryOnClosedConnection(t *testing.T) {
+	testCases := []struct {
+		name string
+		body io.Reader
+	}{
+		{"GET with http.NoBody", http.NoBody},
+		{"GET with nil body", nil},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var dropped atomic.Bool
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Header.Get("Authorization") == "" {
+					w.Header().Set("WWW-Authenticate", `Digest realm="test", nonce="abc", qop="auth", algorithm=MD5`)
+					w.WriteHeader(http.StatusUnauthorized)
+					return
+				}
+				if dropped.CompareAndSwap(false, true) {
+					conn, _, err := w.(http.Hijacker).Hijack()
+					if err != nil {
+						t.Errorf("hijack: %v", err)
+						return
+					}
+					if err := conn.Close(); err != nil {
+						t.Errorf("close: %v", err)
+					}
+					return
+				}
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer srv.Close()
+
+			base := &http.Transport{}
+			defer base.CloseIdleConnections()
+			tr := NewTransportWithHTTPRoundTripper("user", "pass", base)
+			req, err := http.NewRequest(http.MethodGet, srv.URL, tc.body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp, err := tr.RoundTrip(req)
+			if err != nil {
+				t.Fatalf("RoundTrip: %v", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+			}
+			if !dropped.Load() {
+				t.Fatal("server didn't close the connection")
 			}
 		})
 	}
